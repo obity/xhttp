@@ -61,29 +61,22 @@ func (r *Response) ParseProtobuf(result proto.Message) error {
 
 // ParseBytes 将响应体作为二进制数据返回
 // 注意：result 必须是 *[]byte 类型（如 &[]byte{}）
-func (r *Response) ParseBytes(result *[]byte) error {
+func (r *Response) ParseBytes() ([]byte, error) {
 	if r.err != nil {
-		return r.err
+		return nil, r.err
 	}
-	if result == nil {
-		return util.WrapError("解析失败", nil, "原因", "result 不能为 nil，需传入 *[]byte")
-	}
-	// 直接复制原始字节（避免外部修改影响内部数据）
-	*result = make([]byte, len(r.body))
-	copy(*result, r.body)
-	return nil
+
+	return r.body, nil
 }
 
 // ParseString 将响应体转换为字符串返回
 // 注意：result 必须是 *string 类型
-func (r *Response) ParseString(result *string) error {
+func (r *Response) ParseString() (*string, error) {
 	if r.err != nil {
-		return r.err
+		return nil, r.err
 	}
-	if result == nil {
-		return util.WrapError("解析失败", nil, "原因", "result 不能为 nil，需传入 *string")
-	}
+
 	// 将字节转换为UTF-8字符串（二进制安全）
-	*result = string(r.body)
-	return nil
+	result := string(r.body)
+	return &result, nil
 }

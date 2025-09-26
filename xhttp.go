@@ -2,6 +2,7 @@ package xhttp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,11 @@ type API interface {
 	Patch(url string, body any) *Response
 	Put(url string, body any) *Response
 	Delete(url string, body any) *Response
+	GetCtx(ctx context.Context, url string) *Response
+	PostCtx(ctx context.Context, url string, body any) *Response
+	PatchCtx(ctx context.Context, url string, body any) *Response
+	PutCtx(ctx context.Context, url string, body any) *Response
+	DeleteCtx(ctx context.Context, url string, body any) *Response
 }
 
 func NewAPI(headerSetter HeaderSetter) API {
@@ -25,23 +31,47 @@ type apiImpl struct {
 }
 
 func (a *apiImpl) Get(url string) *Response {
-	return sendRequest(http.MethodGet, url, nil, a.setter)
+	return a.GetCtx(context.Background(), url)
 }
+
 func (a *apiImpl) Post(url string, body any) *Response {
-	return sendRequest(http.MethodPost, url, body, a.setter)
+	return a.PostCtx(context.Background(), url, body)
 }
+
 func (a *apiImpl) Patch(url string, body any) *Response {
-	return sendRequest(http.MethodPatch, url, body, a.setter)
+	return a.PatchCtx(context.Background(), url, body)
 }
+
 func (a *apiImpl) Put(url string, body any) *Response {
-	return sendRequest(http.MethodPut, url, body, a.setter)
+	return a.PutCtx(context.Background(), url, body)
 }
+
 func (a *apiImpl) Delete(url string, body any) *Response {
-	return sendRequest(http.MethodDelete, url, body, a.setter)
+	return a.DeleteCtx(context.Background(), url, body)
+}
+
+func (a *apiImpl) GetCtx(ctx context.Context, url string) *Response {
+	return sendRequest(ctx, http.MethodGet, url, nil, a.setter)
+}
+
+func (a *apiImpl) PostCtx(ctx context.Context, url string, body any) *Response {
+	return sendRequest(ctx, http.MethodPost, url, body, a.setter)
+}
+
+func (a *apiImpl) PatchCtx(ctx context.Context, url string, body any) *Response {
+	return sendRequest(ctx, http.MethodPatch, url, body, a.setter)
+}
+
+func (a *apiImpl) PutCtx(ctx context.Context, url string, body any) *Response {
+	return sendRequest(ctx, http.MethodPut, url, body, a.setter)
+}
+
+func (a *apiImpl) DeleteCtx(ctx context.Context, url string, body any) *Response {
+	return sendRequest(ctx, http.MethodDelete, url, body, a.setter)
 }
 
 // 发送HTTP请求的公共函数（每次创建新client）
-func sendRequest(method, url string, body any, headerSetter HeaderSetter) *Response {
+func sendRequest(ctx context.Context, method, url string, body any, headerSetter HeaderSetter) *Response {
 	// 构建请求体
 	var reqBody io.Reader
 	switch v := body.(type) {
@@ -62,7 +92,7 @@ func sendRequest(method, url string, body any, headerSetter HeaderSetter) *Respo
 	}
 
 	// 创建请求
-	req, err := http.NewRequest(method, url, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return &Response{
 			body: nil,

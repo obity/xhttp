@@ -123,19 +123,22 @@ func sendRequest(ctx context.Context, method, url string, body any, headerSetter
 	bytesBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &Response{
-			body: nil,
-			err:  fmt.Errorf("读取响应体失败: %v", err),
+			body:       nil,
+			err:        fmt.Errorf("读取响应体失败: %v", err),
+			statusCode: resp.StatusCode,
 		}
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return &Response{
-			body: nil,
-			err:  fmt.Errorf("请求失败，状态码: %d，响应体: %s", resp.StatusCode, string(bytesBody)),
+			body:       nil,
+			err:        fmt.Errorf("请求失败，状态码: %d，响应体: %s", resp.StatusCode, string(bytesBody)),
+			statusCode: resp.StatusCode,
 		}
 	}
 	return &Response{
-		body: bytesBody,
-		err:  err,
+		body:       bytesBody,
+		err:        err,
+		statusCode: resp.StatusCode,
 	}
 
 }

@@ -9,8 +9,15 @@ import (
 )
 
 type Response struct {
-	body []byte // 响应的数据
-	err  error  // 请求过程中的错误
+	body       []byte // 响应的数据
+	err        error  // 请求过程中的错误
+	statusCode int    // HTTP状态码
+}
+
+// StatusCode 返回HTTP状态码，方便调用者检测错误的不同类型
+// 如果请求过程中发生错误（如网络错误、JSON序列化失败等），返回0
+func (r *Response) StatusCode() int {
+	return r.statusCode
 }
 
 // 从响应中解析JSON

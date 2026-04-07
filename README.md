@@ -19,7 +19,34 @@ type API interface {
 }
 ```
 
-# Example
+## Response
+
+```go
+type Response struct {
+    // 内部字段，不直接访问
+}
+
+// StatusCode 返回HTTP状态码，方便调用者检测错误的不同类型
+// 如果请求过程中发生错误（如网络错误、JSON序列化失败等），返回0
+func (r *Response) StatusCode() int
+
+// ParseJSON 解析JSON响应
+func (r *Response) ParseJSON(result interface{}) error
+
+// ParseXML 解析XML响应
+func (r *Response) ParseXML(result interface{}) error
+
+// ParseProtobuf 解析Protobuf响应
+func (r *Response) ParseProtobuf(result proto.Message) error
+
+// ParseBytes 返回原始字节数据
+func (r *Response) ParseBytes() ([]byte, error)
+
+// ParseString 返回字符串数据
+func (r *Response) ParseString() (*string, error)
+```
+
+## Example
 
 
 1. 上传文件header设置函数举例
@@ -112,5 +139,41 @@ func eventList(status string) (*[]FeishuEventDo, error) {
 		return nil, fmt.Errorf("查询状态= %v 待处理列表失败: %v", status, err)
 	}
 	return &result.Result, nil
+}
+```
+
+4. 使用 StatusCode() 检测不同类型的错误
+
+```go
+func getUser(userId string) (*User, error) {
+	url := APIBaseURL + "/users/" + userId
+	headerSetter := NewHeaders()
+	api := xhttp.NewAPI(headerSetter)
+	resp := api.Get(url)
+	
+	// 检测HTTP状态码
+	switch code := resp.StatusCode(); code {
+	case http.StatusOK:
+		// 成功，解析数据
+		var user User
+		if err := resp.ParseJSON(&user); err != nil {
+			return nil, err
+		}
+		return &user, nil
+	case http.StatusUnauthorized:
+		return nil, fmt.Errorf("认证失败，请检查token")
+	case http.StatusForbidden:
+		return nil, fmt.Errorf("没有权限访问该资源")
+	case http.StatusNotFound:
+		return nil, fmt.Errorf("用户不存在: %s", userId)
+	case http.StatusInternalServerError:
+		return nil, fmt.Errorf("服务器内部错误")
+	default:
+		if code == 0 {
+			// 状态码为0表示请求发送前就失败了（网络错误、JSON序列化失败等）
+			return nil, fmt.Errorf("请求失败: %v", resp.ParseJSON(new(interface{})))
+		}
+		return nil, fmt.Errorf("请求失败，状态码: %d", code)
+	}
 }
 ```

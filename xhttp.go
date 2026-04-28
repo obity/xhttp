@@ -1,14 +1,10 @@
 package xhttp
 
-import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-)
+import "context"
 
+// API 定义了HTTP请求的统一接口。
+// 提供5种HTTP方法的简写（Get/Post/Put/Patch/Delete）及其带Context的版本。
+// 同时也支持通用 Do/DoCtx 方法配合请求级选项使用。
 type API interface {
 	Get(url string) *Response
 	Post(url string, body any) *Response
@@ -20,125 +16,17 @@ type API interface {
 	PatchCtx(ctx context.Context, url string, body any) *Response
 	PutCtx(ctx context.Context, url string, body any) *Response
 	DeleteCtx(ctx context.Context, url string, body any) *Response
+	Do(method, url string, body any, opts ...RequestOption) *Response
+	DoCtx(ctx context.Context, method, url string, body any, opts ...RequestOption) *Response
 }
 
+// NewAPI 创建API接口实例。
+//
+// 返回的API实例底层使用 *Client，支持超时、Transport配置等高级功能。
+// 调用方可通过类型断言获取 *Client 以使用Builder方法：
+//
+//	client := xhttp.NewAPI(setter).(*xhttp.Client)
+//	client.WithTimeout(5 * time.Second)
 func NewAPI(headerSetter HeaderSetter) API {
-	return &apiImpl{setter: headerSetter}
-}
-
-type apiImpl struct {
-	setter HeaderSetter
-}
-
-func (a *apiImpl) Get(url string) *Response {
-	return a.GetCtx(context.Background(), url)
-}
-
-func (a *apiImpl) Post(url string, body any) *Response {
-	return a.PostCtx(context.Background(), url, body)
-}
-
-func (a *apiImpl) Patch(url string, body any) *Response {
-	return a.PatchCtx(context.Background(), url, body)
-}
-
-func (a *apiImpl) Put(url string, body any) *Response {
-	return a.PutCtx(context.Background(), url, body)
-}
-
-func (a *apiImpl) Delete(url string, body any) *Response {
-	return a.DeleteCtx(context.Background(), url, body)
-}
-
-func (a *apiImpl) GetCtx(ctx context.Context, url string) *Response {
-	return sendRequest(ctx, http.MethodGet, url, nil, a.setter)
-}
-
-func (a *apiImpl) PostCtx(ctx context.Context, url string, body any) *Response {
-	return sendRequest(ctx, http.MethodPost, url, body, a.setter)
-}
-
-func (a *apiImpl) PatchCtx(ctx context.Context, url string, body any) *Response {
-	return sendRequest(ctx, http.MethodPatch, url, body, a.setter)
-}
-
-func (a *apiImpl) PutCtx(ctx context.Context, url string, body any) *Response {
-	return sendRequest(ctx, http.MethodPut, url, body, a.setter)
-}
-
-func (a *apiImpl) DeleteCtx(ctx context.Context, url string, body any) *Response {
-	return sendRequest(ctx, http.MethodDelete, url, body, a.setter)
-}
-
-// 发送HTTP请求的公共函数（每次创建新client）
-func sendRequest(ctx context.Context, method, url string, body any, headerSetter HeaderSetter) *Response {
-	// 构建请求体
-	var reqBody io.Reader
-	switch v := body.(type) {
-	case io.Reader:
-		// 直接使用io.Reader（如multipart.Reader）文件上传body不是json
-		reqBody = v
-	default:
-		if body != nil {
-			jsonData, err := json.Marshal(body)
-			if err != nil {
-				return &Response{
-					body: nil,
-					err:  fmt.Errorf("请求体JSON序列化失败: %v", err),
-				}
-			}
-			reqBody = bytes.NewBuffer(jsonData)
-		}
-	}
-
-	// 创建请求
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return &Response{
-			body: nil,
-			err:  fmt.Errorf("创建请求失败: %v", err),
-		}
-	}
-	// 设置默认Content-Type（可被headerSetter覆盖）
-	if reqBody != nil && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	// 设置请求头
-	if headerSetter != nil {
-		headerSetter.SetHeaders(req)
-	}
-
-	client := &http.Client{}
-
-	// 发送请求
-	resp, err := client.Do(req)
-	if err != nil {
-		return &Response{
-			body: nil,
-			err:  fmt.Errorf("发送请求失败: %v", err),
-		}
-	}
-	defer resp.Body.Close()
-	// 读取响应体
-	bytesBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return &Response{
-			body:       nil,
-			err:        fmt.Errorf("读取响应体失败: %v", err),
-			statusCode: resp.StatusCode,
-		}
-	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return &Response{
-			body:       nil,
-			err:        fmt.Errorf("请求失败，状态码: %d，响应体: %s", resp.StatusCode, string(bytesBody)),
-			statusCode: resp.StatusCode,
-		}
-	}
-	return &Response{
-		body:       bytesBody,
-		err:        err,
-		statusCode: resp.StatusCode,
-	}
-
+	return NewClient(headerSetter)
 }

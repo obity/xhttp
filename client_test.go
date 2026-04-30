@@ -1530,3 +1530,47 @@ func TestRetry_PostWithBody(t *testing.T) {
 		t.Errorf("应该重试了 1 次（共 2 次请求），实际请求次数: %d", a)
 	}
 }
+
+// -------------------- 基准测试 --------------------
+
+func BenchmarkNewClient(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = NewClient(nil)
+	}
+}
+
+func BenchmarkSendRequest_Simple(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := NewClient(nil)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = c.Get(server.URL)
+	}
+}
+
+func BenchmarkSendRequest_WithMiddlewareChain(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// 模拟 5 个轻量级中间件
+	mws := make([]Middleware, 5)
+	for i := 0; i < 5; i++ {
+		mws[i] = func(next http.RoundTripper) http.RoundTripper {
+			return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return next.RoundTrip(req)
+			})
+		}
+	}
+
+	c := NewClient(nil).WithMiddlewares(mws...)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = c.Get(server.URL)
+	}
+}

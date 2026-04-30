@@ -1,6 +1,7 @@
 package xhttp
 
 import (
+	"log"
 	"net/http"
 	"time"
 )
@@ -9,19 +10,6 @@ import (
 //
 // 使用装饰器模式，每个中间件接收一个 http.RoundTripper，返回一个新的 http.RoundTripper。
 // 多个中间件按注册顺序从外到内执行。
-//
-// 示例 — Logging 中间件：
-//
-//	func LoggingMiddleware(logger *log.Logger) Middleware {
-//	    return func(next http.RoundTripper) http.RoundTripper {
-//	        return roundTripFunc(func(req *http.Request) (*http.Response, error) {
-//	            logger.Printf("→ %s %s", req.Method, req.URL)
-//	            resp, err := next.RoundTrip(req)
-//	            // ...
-//	            return resp, err
-//	        })
-//	    }
-//	}
 type Middleware func(next http.RoundTripper) http.RoundTripper
 
 // roundTripFunc 将函数适配为 http.RoundTripper。
@@ -29,6 +17,33 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+// LoggingMiddleware 创建一个简单的日志中间件。
+// loggerFunc 接收格式化后的日志字符串。如果为 nil，默认使用 log.Printf。
+func LoggingMiddleware(loggerFunc func(format string, v ...any)) Middleware {
+	if loggerFunc == nil {
+		loggerFunc = log.Printf
+	}
+	return func(next http.RoundTripper) http.RoundTripper {
+		return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			start := time.Now()
+			resp, err := next.RoundTrip(req)
+			duration := time.Since(start)
+
+			status := 0
+			if resp != nil {
+				status = resp.StatusCode
+			}
+
+			if err != nil {
+				loggerFunc("← %s %s | %d | %v | ERR: %v", req.Method, req.URL, status, duration, err)
+			} else {
+				loggerFunc("← %s %s | %d | %v", req.Method, req.URL, status, duration)
+			}
+			return resp, err
+		})
+	}
 }
 
 // ---------- 重试配置 ----------

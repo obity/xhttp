@@ -54,6 +54,15 @@ func retryMiddleware(cfg *retryConfig, method string) Middleware {
 			var lastResp *http.Response
 
 			for attempt := 1; attempt <= cfg.maxAttempts; attempt++ {
+				// 如果不是第一次尝试且有 GetBody 方法，重置 Body 以防被前一次尝试消耗
+				if attempt > 1 && req.GetBody != nil {
+					newBody, err := req.GetBody()
+					if err != nil {
+						return nil, err
+					}
+					req.Body = newBody
+				}
+
 				resp, err := next.RoundTrip(req)
 				lastResp = resp
 				lastErr = err

@@ -125,8 +125,8 @@ func TestBuilderCopyOnWrite(t *testing.T) {
 	if c1 == c2 {
 		t.Error("WithTimeout 应返回新实例")
 	}
-	if c1.httpClient.Timeout != 0 {
-		t.Error("原实例不应被修改")
+	if c1.httpClient.Timeout != 30*time.Second {
+		t.Errorf("原实例不应被修改，期望 %v，实际 %v", 30*time.Second, c1.httpClient.Timeout)
 	}
 	if c2.httpClient.Timeout != 5*time.Second {
 		t.Error("新实例应包含新配置")
@@ -1484,5 +1484,49 @@ func TestHeaderSetter_contentTypeOverride(t *testing.T) {
 	_ = c.Post(server.URL, "some body")
 	if gotCT != "application/override" {
 		t.Errorf("Content-Type: 期望 %q，实际 %q", "application/override", gotCT)
+	}
+}
+
+// TestRetry_PostWithBody 验证重试时 Body 不会丢失（回归测试）
+func TestRetry_PostWithBody(t *testing.T) {
+	attempts := 0
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attempts++
+		current := attempts
+		mu.Unlock()
+
+		body, _ := io.ReadAll(r.Body)
+		if current == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		// 第二次请求时校验 Body 是否完整
+		if string(body) != `{"foo":"bar"}` {
+			t.Errorf("重试时 Body 丢失或不正确，得到: %q", string(body))
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+
+	// 使用自定义 shouldRetry 强制对 POST 进行重试
+	c := NewClient(nil).WithRetry(3, 1*time.Millisecond, func(code int, err error) bool {
+		return code == http.StatusServiceUnavailable
+	})
+
+	resp := c.Post(server.URL, map[string]string{"foo": "bar"})
+	if resp.StatusCode() != http.StatusOK {
+		t.Errorf("期望 200，得到 %d", resp.StatusCode())
+	}
+
+	mu.Lock()
+	a := attempts
+	mu.Unlock()
+	if a != 2 {
+		t.Errorf("应该重试了 1 次（共 2 次请求），实际请求次数: %d", a)
 	}
 }

@@ -35,7 +35,9 @@ type Client struct {
 func NewClient(setter HeaderSetter) *Client {
 	return &Client{
 		headerSetter: setter,
-		httpClient:   &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 		successCodes: cloneMap(defaultSuccessCodes),
 	}
 }
